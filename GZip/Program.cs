@@ -40,13 +40,6 @@ namespace GZip
             try
             {
                 var operation = operationDeterminator.Determinate(operationName);
-
-                if (operation == null)
-                {
-                    Console.WriteLine("ERROR!!! Can`t determinate operation!");
-                    return 1;
-                }
-
                 operation.Execute(options);
             }
             catch (Exception ex)

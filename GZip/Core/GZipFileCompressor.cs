@@ -3,6 +3,7 @@ using GZip.Utils;
 using System;
 using System.IO;
 using System.IO.Compression;
+using System.Threading;
 
 namespace GZip.Core
 {
@@ -11,6 +12,8 @@ namespace GZip.Core
     /// </summary>
     public class GZipFileCompressor : BaseGZip, IGZipCompressor
     {
+        public override event Action<string> OnError;
+
         public void Compress(Options compressOptions)
         {
             if (compressOptions == null)
@@ -23,27 +26,71 @@ namespace GZip.Core
                 compressOptions.BufferSize = defaultBufferSize;
             }
 
+            IsCompleted = false;
+
+            ManualResetEvent.Reset();
+
             Processing(compressOptions);
         }
 
         public override void ThreadProcessing(object threadParam)
         {
-            if (CancellationTokenSource.IsCancellationRequested)
+            lock (lockObject)
             {
-                return;
+                if (CancellationTokenSource.IsCancellationRequested)
+                {
+                    return;
+                } 
             }
 
             var compressOptions = threadParam as Options;
+            string errorMessage = string.Empty;
 
-            using FileStream stream = new FileStream(compressOptions.SourceFilePath, FileMode.Open, FileAccess.Read);
-            using FileStream target = new FileStream(compressOptions.TargetFilePath, FileMode.Create, FileAccess.Write, FileShare.Write);
-            using BufferedStream bufferedStream = new BufferedStream(stream);
-            using GZipStream gzipStream = new GZipStream(target, CompressionLevel.Fastest);
+            try
+            {
+                var targetFileDirectory = Path.GetDirectoryName(compressOptions.TargetFilePath);
+                var targetFileName = Path.GetFileNameWithoutExtension(compressOptions.TargetFilePath);
+                var sourceFileExtension = Path.GetExtension(compressOptions.SourceFilePath);
 
-            bufferedStream.CopyWithChunkTo(gzipStream, compressOptions.BufferSize, lockObject);
+                var newTargetFilePath = $"{targetFileDirectory}{targetFileName}{sourceFileExtension}.gz";
 
+                using FileStream stream = new FileStream(compressOptions.SourceFilePath, FileMode.Open, FileAccess.Read);
+                using FileStream target = new FileStream(newTargetFilePath, FileMode.Create, FileAccess.Write, FileShare.Write);
+                using BufferedStream bufferedStream = new BufferedStream(stream);
+                using GZipStream gzipStream = new GZipStream(target, CompressionLevel.Fastest);
 
-            CancellationTokenSource.Cancel();
+                bufferedStream.CopyWithChunkTo(gzipStream, compressOptions.BufferSize, lockObject);
+            }
+            catch (FileNotFoundException ex)
+            {
+                errorMessage = $"Source file ({ex.FileName}) not found";
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                errorMessage = $"Can`t access to file: {ex.Message}";
+            }
+            catch (IOException ex)
+            {
+                errorMessage = $"Error occered while compressing file: {ex.Message}";
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Not recognized error: {ex.Message}";
+            }
+            finally
+            {
+                lock (lockObject)
+                {
+                    if (!string.IsNullOrWhiteSpace(errorMessage) && !IsCompleted)
+                    {
+                        OnError?.Invoke(errorMessage);
+                        IsCompleted = true;
+                    }
+                    ManualResetEvent.Set();
+                    CancellationTokenSource.Cancel();
+                }
+
+            }
         }
     }
 }

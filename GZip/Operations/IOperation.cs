@@ -7,6 +7,7 @@ namespace GZip.Operations
 {
     public interface IOperation
     {
+        event Action<string> OnError;
         void Execute(Options options);
     }
 }

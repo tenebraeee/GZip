@@ -5,18 +5,24 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 
 namespace GZip
 {
     class Program
     {
         static readonly OperationDeterminator operationDeterminator;
+        static readonly ManualResetEvent manualResetEvent;
+        static int exitCode = 0;
+
         static Program()
         {
+            manualResetEvent = new ManualResetEvent(false);
+
             operationDeterminator = new OperationDeterminator();
 
-            operationDeterminator.TryAddOperation(OperationTypes.Compress, new CompressOperation());
-            operationDeterminator.TryAddOperation(OperationTypes.Decompress, new DecompressOperation());
+            operationDeterminator.TryAddOperation(OperationTypes.Compress, new CompressOperation(OnError, manualResetEvent));
+            operationDeterminator.TryAddOperation(OperationTypes.Decompress, new DecompressOperation(OnError, manualResetEvent));
         }
 
         static int Main(string[] args)
@@ -37,31 +43,26 @@ namespace GZip
 
             string operationName = args[0].Trim();
 
-            try
-            {
-                var operation = operationDeterminator.Determinate(operationName);
-                operation.Execute(options);
-            }
-            catch (Exception ex)
-            {
-                //todo: писать в логи
-                return 1;
-            }
+            var operation = operationDeterminator.Determinate(operationName);
 
-            return 0;
+            operation.Execute(options);
+
+            manualResetEvent.WaitOne();
+
+            return exitCode;
         }
 
         private static Options GenerateOptionsFrom(string[] args)
         {
-            string sourceFile = args[1].Trim();
-            string targetFile = args[2].Trim();
+            string sourceFilePath = args[1].Trim();
+            string targetFilePath = args[2].Trim();
 
             return new Options
             {
                 BufferSize = 1024 * 1024 * 5,
 
-                SourceFilePath = sourceFile,
-                TargetFilePath = targetFile,
+                SourceFilePath = sourceFilePath,
+                TargetFilePath = targetFilePath,
             };
         }
 
@@ -79,13 +80,6 @@ namespace GZip
                 return "ERROR!!! Operation not specified!";
             }
 
-            string sourceFile = args[1].Trim();
-
-            if (!File.Exists(sourceFile))
-            {
-                return $"ERROR!!! Source file not found. Search at {sourceFile}.";
-            }
-
             return null;
         }
 
@@ -99,10 +93,16 @@ namespace GZip
             stringBuilder.AppendLine("-----------------------------------------");
             stringBuilder.AppendLine($"operation        - {availableOperationsString}");
             stringBuilder.AppendLine($"source file path - relative/absolute path to source file");
-            stringBuilder.AppendLine($"target file path - relative/absolute path to target file");
+            stringBuilder.AppendLine($"target file path - relative/absolute path to target file (extension will be skiped)");
             stringBuilder.AppendLine("-----------------------------------------");
 
             return stringBuilder.ToString();
+        }
+
+        private static void OnError(string errorMessage)
+        {
+            exitCode = 1;
+            Console.WriteLine(errorMessage);
         }
 
     }

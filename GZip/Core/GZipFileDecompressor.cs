@@ -3,6 +3,7 @@ using GZip.Utils;
 using System;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Threading;
 
 namespace GZip.Core
@@ -12,6 +13,8 @@ namespace GZip.Core
     /// </summary>
     public class GZipFileDecompressor : BaseGZip, IGZipDecompressor
     {
+        public override event Action<string> OnError;
+
         public void Decompress(Options decompressOptions)
         {
             if (decompressOptions == null)
@@ -24,27 +27,69 @@ namespace GZip.Core
                 decompressOptions.BufferSize = defaultBufferSize;
             }
 
+            ManualResetEvent.Reset();
+
             Processing(decompressOptions);
         }
 
         public override void ThreadProcessing(object threadParam)
         {
-            if (CancellationTokenSource.IsCancellationRequested)
+            lock (lockObject)
             {
-                return;
+                if (CancellationTokenSource.IsCancellationRequested)
+                {
+                    return;
+                } 
             }
 
             var decompressOptions = threadParam as Options;
+            string errorMessage = string.Empty;
 
-            using FileStream stream = new FileStream(decompressOptions.SourceFilePath, FileMode.Open, FileAccess.Read);
-            using FileStream target = new FileStream(decompressOptions.TargetFilePath, FileMode.Create, FileAccess.Write, FileShare.Write);
-            using GZipStream gzipStream = new GZipStream(stream, CompressionMode.Decompress);
-            using BufferedStream bufferedStream = new BufferedStream(gzipStream);
+            try
+            {
+                var targetFileDirectory = Path.GetDirectoryName(decompressOptions.TargetFilePath);
+                var targetFileName = Path.GetFileNameWithoutExtension(decompressOptions.TargetFilePath);
+                var sourceFileExtension = decompressOptions.SourceFilePath.Split('.').Reverse().ElementAt(1);
 
-            bufferedStream.CopyWithChunkTo(target, decompressOptions.BufferSize, lockObject);
+                var newTargetFilePath = $"{targetFileDirectory}{targetFileName}.{sourceFileExtension}";
 
+                using FileStream stream = new FileStream(decompressOptions.SourceFilePath, FileMode.Open, FileAccess.Read);
+                using FileStream target = new FileStream(newTargetFilePath, FileMode.Create, FileAccess.Write, FileShare.Write);
+                using GZipStream gzipStream = new GZipStream(stream, CompressionMode.Decompress);
+                using BufferedStream bufferedStream = new BufferedStream(gzipStream);
 
-            CancellationTokenSource.Cancel();
+                bufferedStream.CopyWithChunkTo(target, decompressOptions.BufferSize, lockObject);
+            }
+            catch (FileNotFoundException ex)
+            {
+                errorMessage = $"Source file ({ex.FileName}) not found";
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                errorMessage = $"Can`t access to file. Error message: {ex.Message}";
+            }
+            catch (IOException ex)
+            {
+                errorMessage = $"Error occured while decompressing file. Error message: {ex.Message}";
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Not recognized error. Error message: {ex.Message}";
+            }
+            finally
+            {
+                lock (lockObject)
+                {
+                    if (!string.IsNullOrWhiteSpace(errorMessage) && !IsCompleted)
+                    {
+                        OnError?.Invoke(errorMessage);
+                        IsCompleted = true;
+                    }
+                    ManualResetEvent.Set();
+                    CancellationTokenSource.Cancel();
+                }
+
+            }
         }
     }
 }

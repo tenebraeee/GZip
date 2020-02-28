@@ -2,6 +2,7 @@
 using GZip.Models.Common;
 using GZip.Operations;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -91,9 +92,11 @@ namespace GZip
             var availableOperationsString = string.Join(", ", availableOperations);
 
             stringBuilder.AppendLine("-----------------------------------------");
-            stringBuilder.AppendLine($"operation        - {availableOperationsString}");
-            stringBuilder.AppendLine($"source file path - relative/absolute path to source file");
-            stringBuilder.AppendLine($"target file path - relative/absolute path to target file (extension will be skiped)");
+            stringBuilder.AppendLine("Run example: ");
+            stringBuilder.AppendLine($"{Path.GetFileName(Process.GetCurrentProcess().MainModule.FileName)} operation source target");
+            stringBuilder.AppendLine($"operation - {availableOperationsString}");
+            stringBuilder.AppendLine($"source    - relative/absolute path to source file");
+            stringBuilder.AppendLine($"target    - relative/absolute path to target file (extension will be skiped)");
             stringBuilder.AppendLine("-----------------------------------------");
 
             return stringBuilder.ToString();

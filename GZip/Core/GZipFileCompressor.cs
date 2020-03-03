@@ -13,7 +13,7 @@ namespace GZip.Core
     public class GZipFileCompressor : BaseGZip, IGZipCompressor
     {
         public override event Action<string> OnError;
-
+       
         public void Compress(Options compressOptions)
         {
             if (compressOptions == null)
@@ -52,14 +52,18 @@ namespace GZip.Core
                 var targetFileName = Path.GetFileNameWithoutExtension(compressOptions.TargetFilePath);
                 var sourceFileExtension = Path.GetExtension(compressOptions.SourceFilePath);
 
-                var newTargetFilePath = $"{targetFileDirectory}{targetFileName}{sourceFileExtension}.gz";
+                var newTargetFilePath = $"{Path.Combine(targetFileDirectory, targetFileName)}{sourceFileExtension}.gz";
 
-                using FileStream stream = new FileStream(compressOptions.SourceFilePath, FileMode.Open, FileAccess.Read);
-                using FileStream target = new FileStream(newTargetFilePath, FileMode.Create, FileAccess.Write, FileShare.Write);
-                using BufferedStream bufferedStream = new BufferedStream(stream);
-                using GZipStream gzipStream = new GZipStream(target, CompressionLevel.Fastest);
-
-                bufferedStream.CopyWithChunkTo(gzipStream, compressOptions.BufferSize, lockObject);
+                lock (lockObject)
+                {
+                    using (source = new FileStream(compressOptions.SourceFilePath, FileMode.Open, FileAccess.Read))
+                    using (target = new FileStream(newTargetFilePath, FileMode.Create, FileAccess.Write, FileShare.Write))
+                    using (bufferedStream = new BufferedStream(source))
+                    using (gzipStream = new GZipStream(target, CompressionLevel.Fastest))
+                    {
+                        bufferedStream.CopyWithChunkTo(gzipStream, compressOptions.BufferSize);
+                    } 
+                }
             }
             catch (FileNotFoundException ex)
             {

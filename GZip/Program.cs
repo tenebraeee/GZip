@@ -60,7 +60,7 @@ namespace GZip
 
             return new Options
             {
-                BufferSize = 1024 * 1024 * 5,
+                BufferSize = 1024 * 1024 * 50,
 
                 SourceFilePath = sourceFilePath,
                 TargetFilePath = targetFilePath,

@@ -5,7 +5,7 @@ namespace GZip.Utils
 {
     public static class StreamExtension
     {
-        public static void CopyWithChunkTo(this Stream source, Stream target, uint bufferSize, object lockObject = null)
+        public static void CopyWithChunkTo(this Stream source, Stream target, uint bufferSize)
         {
             byte[] buffer = new byte[bufferSize];
 
@@ -18,18 +18,14 @@ namespace GZip.Utils
                     break;
                 }
 
-                if(lockObject == null)
-                {
-                    target.Write(buffer.Take(bytesCount).ToArray(), 0, bytesCount);
+                var bytes = buffer;
 
-                }
-                else
+                if (bytesCount != bufferSize)
                 {
-                    lock (lockObject)
-                    {
-                        target.Write(buffer.Take(bytesCount).ToArray(), 0, bytesCount);
-                    }
+                    bytes = bytes.Take(bytesCount).ToArray();
                 }
+                
+                target.Write(bytes, 0, bytesCount);
             }
         }
 

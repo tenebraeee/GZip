@@ -1,4 +1,6 @@
 ﻿using System;
+using System.IO;
+using System.IO.Compression;
 using System.Threading;
 
 namespace GZip.Core
@@ -8,6 +10,12 @@ namespace GZip.Core
         public virtual event Action<string> OnError;
 
         public ManualResetEvent ManualResetEvent;
+
+        protected FileStream source;
+        protected FileStream target;
+        protected BufferedStream bufferedStream;
+        protected GZipStream gzipStream;
+
         protected bool IsCompleted { get; set; }
         protected uint defaultBufferSize = 1024 * 1024 * 5;
 

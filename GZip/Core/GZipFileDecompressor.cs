@@ -51,14 +51,18 @@ namespace GZip.Core
                 var targetFileName = Path.GetFileNameWithoutExtension(decompressOptions.TargetFilePath);
                 var sourceFileExtension = decompressOptions.SourceFilePath.Split('.').Reverse().ElementAt(1);
 
-                var newTargetFilePath = $"{targetFileDirectory}{targetFileName}.{sourceFileExtension}";
+                var newTargetFilePath = $"{Path.Combine(targetFileDirectory, targetFileName)}.{sourceFileExtension}";
 
-                using FileStream stream = new FileStream(decompressOptions.SourceFilePath, FileMode.Open, FileAccess.Read);
-                using FileStream target = new FileStream(newTargetFilePath, FileMode.Create, FileAccess.Write, FileShare.Write);
-                using GZipStream gzipStream = new GZipStream(stream, CompressionMode.Decompress);
-                using BufferedStream bufferedStream = new BufferedStream(gzipStream);
-
-                bufferedStream.CopyWithChunkTo(target, decompressOptions.BufferSize, lockObject);
+                lock (lockObject)
+                {
+                    using (source = new FileStream(decompressOptions.SourceFilePath, FileMode.Open, FileAccess.Read))
+                    using (target = new FileStream(newTargetFilePath, FileMode.Create, FileAccess.Write, FileShare.Write))
+                    using (gzipStream = new GZipStream(source, CompressionMode.Decompress))
+                    using (bufferedStream = new BufferedStream(gzipStream))
+                    {
+                        bufferedStream.CopyWithChunkTo(target, decompressOptions.BufferSize);
+                    }
+                }
             }
             catch (FileNotFoundException ex)
             {
